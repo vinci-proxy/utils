@@ -6,14 +6,7 @@ import (
 	"testing"
 
 	"github.com/nbio/st"
-	. "gopkg.in/check.v1"
 )
-
-func TestUtils(t *testing.T) { TestingT(t) }
-
-type NetUtilsSuite struct{}
-
-var _ = Suite(&NetUtilsSuite{})
 
 // Make sure copy does it right, so the copied url
 // is safe to alter without modifying the other
