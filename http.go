@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ProxyWriter helps to capture response headers and status code
@@ -154,4 +155,23 @@ func RemoveHeaders(headers http.Header, names ...string) {
 	for _, h := range names {
 		headers.Del(h)
 	}
+}
+
+// IsWebsocketRequest determines if the specified HTTP request is a websocket handshake request.
+func IsWebsocketRequest(req *http.Request) bool {
+	return ConstainsHeader(req, "Connection", "upgrade") && ConstainsHeader(req, "Upgrade", "websocket")
+}
+
+// ConstainsHeader checks if the given header field is present if the given HTTP request.
+func ConstainsHeader(req *http.Request, name, value string) bool {
+	if name == "" || value == "" {
+		return false
+	}
+	items := strings.Split(req.Header.Get(name), ",")
+	for _, item := range items {
+		if value == strings.ToLower(strings.TrimSpace(item)) {
+			return true
+		}
+	}
+	return false
 }
