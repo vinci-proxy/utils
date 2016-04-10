@@ -179,6 +179,17 @@ func ConstainsHeader(req *http.Request, name, value string) bool {
 	return false
 }
 
+// DefaultTransport is the default implementation of http.Transport as in http.DefaultTransport.
+// Designed to be reused by multiple packages and efficient in terms of GC (won't leak).
+var DefaultTransport *http.Transport
+
+// init initializes the default transport
+func init() {
+	var transport = NewDefaultTransport()
+	EnsureTransporterFinalized(transport)
+	DefaultTransport = transport
+}
+
 // EnsureTransporterFinalized will ensure that when the HTTP client is GCed
 // the runtime will close the idle connections (so that they won't leak)
 // this function was adopted from Hashicorp's go-cleanhttp package.
@@ -188,21 +199,21 @@ func EnsureTransporterFinalized(httpTransport *http.Transport) {
 	})
 }
 
-// DefaultTransport returns a new http.Transport with the same default values
+// NewDefaultTransport returns a new http.Transport with the same default values
 // as http.DefaultTransport, but with idle connections and keepalives disabled.
-func DefaultTransport() *http.Transport {
-	transport := DefaultPooledTransport()
+func NewDefaultTransport() *http.Transport {
+	transport := NewDefaultPooledTransport()
 	transport.DisableKeepAlives = true
 	transport.MaxIdleConnsPerHost = -1
 	return transport
 }
 
-// DefaultPooledTransport returns a new http.Transport with similar default
+// NewDefaultPooledTransport returns a new http.Transport with similar default
 // values to http.DefaultTransport. Do not use this for transient transports as
 // it can leak file descriptors over time. Only use this for transports that
 // will be re-used for the same host(s).
-func DefaultPooledTransport() *http.Transport {
-	transport := &http.Transport{
+func NewDefaultPooledTransport() *http.Transport {
+	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		Dial: (&net.Dialer{
 			Timeout:   30 * time.Second,
@@ -212,5 +223,4 @@ func DefaultPooledTransport() *http.Transport {
 		DisableKeepAlives:   false,
 		MaxIdleConnsPerHost: 1,
 	}
-	return transport
 }
