@@ -2,9 +2,12 @@ package utils
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
+	"time"
 )
 
 // ProxyWriter helps to capture response headers and status code
@@ -174,4 +177,40 @@ func ConstainsHeader(req *http.Request, name, value string) bool {
 		}
 	}
 	return false
+}
+
+// EnsureTransporterFinalized will ensure that when the HTTP client is GCed
+// the runtime will close the idle connections (so that they won't leak)
+// this function was adopted from Hashicorp's go-cleanhttp package.
+func EnsureTransporterFinalized(httpTransport *http.Transport) {
+	runtime.SetFinalizer(&httpTransport, func(transportInt **http.Transport) {
+		(*transportInt).CloseIdleConnections()
+	})
+}
+
+// DefaultTransport returns a new http.Transport with the same default values
+// as http.DefaultTransport, but with idle connections and keepalives disabled.
+func DefaultTransport() *http.Transport {
+	transport := DefaultPooledTransport()
+	transport.DisableKeepAlives = true
+	transport.MaxIdleConnsPerHost = -1
+	return transport
+}
+
+// DefaultPooledTransport returns a new http.Transport with similar default
+// values to http.DefaultTransport. Do not use this for transient transports as
+// it can leak file descriptors over time. Only use this for transports that
+// will be re-used for the same host(s).
+func DefaultPooledTransport() *http.Transport {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		Dial: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+		DisableKeepAlives:   false,
+		MaxIdleConnsPerHost: 1,
+	}
+	return transport
 }
