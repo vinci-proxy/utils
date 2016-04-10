@@ -2,8 +2,12 @@ package utils
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"runtime"
+	"strings"
+	"time"
 )
 
 // ProxyWriter helps to capture response headers and status code
@@ -153,5 +157,70 @@ func HasHeaders(names []string, headers http.Header) bool {
 func RemoveHeaders(headers http.Header, names ...string) {
 	for _, h := range names {
 		headers.Del(h)
+	}
+}
+
+// IsWebsocketRequest determines if the specified HTTP request is a websocket handshake request.
+func IsWebsocketRequest(req *http.Request) bool {
+	return ConstainsHeader(req, "Connection", "upgrade") && ConstainsHeader(req, "Upgrade", "websocket")
+}
+
+// ConstainsHeader checks if the given header field is present if the given HTTP request.
+func ConstainsHeader(req *http.Request, name, value string) bool {
+	if name == "" || value == "" {
+		return false
+	}
+	items := strings.Split(req.Header.Get(name), ",")
+	for _, item := range items {
+		if value == strings.ToLower(strings.TrimSpace(item)) {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultTransport is the default implementation of http.Transport as in http.DefaultTransport.
+// Designed to be reused by multiple packages and efficient in terms of GC (won't leak).
+var DefaultTransport *http.Transport
+
+// init initializes the default transport
+func init() {
+	var transport = NewDefaultPooledTransport()
+	EnsureTransporterFinalized(transport)
+	DefaultTransport = transport
+}
+
+// EnsureTransporterFinalized will ensure that when the HTTP client is GCed
+// the runtime will close the idle connections (so that they won't leak)
+// this function was adopted from Hashicorp's go-cleanhttp package.
+func EnsureTransporterFinalized(httpTransport *http.Transport) {
+	runtime.SetFinalizer(&httpTransport, func(transportInt **http.Transport) {
+		(*transportInt).CloseIdleConnections()
+	})
+}
+
+// NewDefaultTransport returns a new http.Transport with the same default values
+// as http.DefaultTransport, but with idle connections and keepalives disabled.
+func NewDefaultTransport() *http.Transport {
+	transport := NewDefaultPooledTransport()
+	transport.DisableKeepAlives = true
+	transport.MaxIdleConnsPerHost = -1
+	return transport
+}
+
+// NewDefaultPooledTransport returns a new http.Transport with similar default
+// values to http.DefaultTransport. Do not use this for transient transports as
+// it can leak file descriptors over time. Only use this for transports that
+// will be re-used for the same host(s).
+func NewDefaultPooledTransport() *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		Dial: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+		DisableKeepAlives:   false,
+		MaxIdleConnsPerHost: 1,
 	}
 }
