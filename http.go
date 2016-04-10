@@ -185,7 +185,7 @@ var DefaultTransport *http.Transport
 
 // init initializes the default transport
 func init() {
-	var transport = NewDefaultTransport()
+	var transport = NewDefaultPooledTransport()
 	EnsureTransporterFinalized(transport)
 	DefaultTransport = transport
 }
